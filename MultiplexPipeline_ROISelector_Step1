@@ -1,0 +1,277 @@
+% This program uses user-selected folders of all channels in an image set.
+% It allows the user to draw a freehand ROI on the overlay. The overlay is
+% masked with a binary mask (ROI = 1, non-ROI = 0), which is used to cutout
+% the ROI from the original image. The final product is an image that
+% has the ROI shown with the non-ROI areas as black to prevent counting in
+% Step 2. The mask is used to cut out the exact same areas in all other
+% the other channels. 
+
+%Input: All tifs of image set organized in folders by channel
+%Output: ROIs of all tifs, ROI.mat file
+
+
+% Last edited date: 03/03/2022
+% Created by Isabella Swank, based on original program by Runbo Gao,
+% donated by the Anna Lee Lab
+
+
+clear all; clc
+
+
+
+%Locates folder where you want your ROIs to be sent to
+disp('Please select the folder you want to store ROI information')
+ROIPath =uigetdir(); % select the folder storing ROIs
+
+%Holds ROI information
+ROIs = struct('ImageID',[],'roi',[],'masks',[],'cutout',[],'ROIArea',[]);
+
+%Locates CH1, CH2, CH3(DAPI),CH4, and Overlay Folders
+ChlNum = input("How many channels/probes are in each image set? (Don't include overlay)");
+    if ChlNum == 4
+       disp("Please select the folder containing CH1 images");
+       CH1 = uigetdir();
+       disp("Please select the folder containing CH2 images");
+       CH2 = uigetdir();
+       disp("Please select the folder containing DAPI images");
+       DAPI_CH3 = uigetdir();
+       disp("Please select the folder containing CH4 images");
+       CH4 = uigetdir();
+       disp("Please select the folder containing Overlay images");
+       Overlays = uigetdir();
+    else 
+       disp("Please select the folder containing CH1 images");
+       CH1 = uigetdir();
+       disp("Please select the folder containing CH2 images");
+       CH2 = uigetdir();
+       disp("Please select the folder containing DAPI images");
+       DAPI_CH3 = uigetdir();
+       disp("Please select the folder containing Overlay images");
+       Overlays = uigetdir();
+    end
+       
+    close all
+
+
+%Overlay ROI selection and Overlay Processing
+
+Overlay_path = Overlays;
+Overlaynames = dir(fullfile(Overlay_path, '*.tif'));%Image names
+totalOverlays = numel(Overlaynames);
+
+%Loops through all imported Overlays
+for k = 1:totalOverlays
+    fd = fieldnames(Overlaynames(k));
+    ROIs(k,1).ImageID = Overlaynames;
+    f = fullfile(Overlay_path, Overlaynames(k).name);
+    loadoverlays = imread(f);
+     gh = im2gray(loadoverlays);%color to greyscale, simpler processing
+     imshow(gh);
+     
+     roi = drawfreehand;%Draw ROI
+     C = input('Is the ROI good? (Type Enter to continue)');
+     ROIs(k,1).roi = roi;%Saves ROI
+     
+     ROImask = createMask(roi);%Makes binary mask, ROI = 1, Outside = 0
+     imshow(ROImask);
+     mask = logical(ROImask);
+     
+     ROI_area = regionprops(mask,'Area');%Measures area of mask for step 3
+     
+     ROIs(k,1).masks = mask;%Save masks
+     ROIs(k,1).ROIArea = ROI_area;%Save measured areas
+     
+     finalOverlays = bsxfun(@times, gh, cast(mask, 'like', gh));%Cuts out ROI in image using binary mask
+    
+     close all
+    
+     figure;
+     imshow(finalOverlays);%Final output, should just be ROI of greyscale image
+     C = input('Is the final ROI good? (Type Enter to continue)');
+     ROIs(k,1).cutout=finalOverlays; %Saves cutout
+     cd(ROIPath);
+    
+     imwrite(finalOverlays,strcat(Overlaynames(k,1).name,'_ROI.tif'),'tif'); %Makes new image file
+    
+     close all
+
+end
+
+cd(ROIPath)
+save('ROIs.mat','ROIs') % save ROIs variable in the ROIs.mat file
+close()
+
+
+if ChlNum == 4
+
+%load and process CH1 images using ROI masks
+
+CH1_path = CH1;
+CH1names = dir(fullfile(CH1_path, '*.tif'));
+totalCH1 = numel(CH1names);
+
+
+%Loops through CH1 images
+for k = 1:totalCH1
+    fd1 = fieldnames(CH1names(k));
+    f = fullfile(CH1_path, CH1names(k).name);
+    loadCH1 = imread(f);
+    ghCH1 = im2gray(loadCH1);%color to greyscale, simpler processing
+
+    finalCH1 = bsxfun(@times, ghCH1, cast(ROIs(k,1).masks, 'like', ghCH1));%cuts out CH1 image with ROI mask
+    close all
+ 
+    cd(ROIPath);
+    imwrite(finalCH1,strcat(CH1names(k,1).name,'_ROI.tif'),'tif');%Saves image file
+    
+    close all
+end
+
+cd(ROIPath)
+save('ROIs.mat','ROIs') % save ROIs variable in the ROIs.mat file
+close()
+
+%load and process CH2
+CH2_path = CH2;
+CH2names = dir(fullfile(CH2_path, '*.tif'));
+totalCH2 = numel(CH2names);
+
+%Loops through CH2 images
+for k = 1:totalCH2
+    fd2 = fieldnames(CH2names(k));
+    f = fullfile(CH2_path, CH2names(k).name);
+    loadCH2 = imread(f);
+    ghCH2 = im2gray(loadCH2);%color to greyscale, simpler processing
+
+    finalCH2 = bsxfun(@times, ghCH2, cast(ROIs(k,1).masks, 'like', ghCH2));%cuts out CH2 image with ROI mask
+    close all
+ 
+    cd(ROIPath);
+    imwrite(finalCH2,strcat(CH2names(k,1).name,'_ROI.tif'),'tif');%Saves image file
+
+    close all
+end
+
+%load and process CH3/DAPI
+
+DAPI_CH3_path = DAPI_CH3;
+DAPI_CH3names = dir(fullfile(DAPI_CH3_path, '*.tif'));
+totalDAPI_CH3 = numel(DAPI_CH3names);
+
+%Loops through DAPI/CH3 images
+for k = 1:totalDAPI_CH3
+    fd3 = fieldnames(DAPI_CH3names(k));
+    f = fullfile(DAPI_CH3_path, DAPI_CH3names(k).name);
+    loadDAPI_CH3 = imread(f);
+    ghDAPI_CH3 = im2gray(loadDAPI_CH3);%color to greyscale, simpler processing
+
+    finalDAPI_CH3 = bsxfun(@times, ghDAPI_CH3, cast(ROIs(k,1).masks, 'like', ghDAPI_CH3));%cuts out CH3/DAPI image with ROI mask
+    close all
+   
+    cd(ROIPath);
+    imwrite(finalDAPI_CH3,strcat(DAPI_CH3names(k,1).name,'_ROI.tif'),'tif');%Saves image file   
+    close all
+end
+
+
+%load and process CH4
+
+CH4_path = CH4;
+CH4names = dir(fullfile(CH4_path, '*.tif'));
+totalCH4 = numel(CH4names);
+
+%Loops through CH4 images
+for k = 1:totalCH4
+    fd4 = fieldnames(CH4names(k));
+    f = fullfile(CH4_path, CH4names(k).name);
+    loadCH4 = imread(f);
+    ghCH4 = im2gray(loadCH4);%color to greyscale, simpler processing
+
+    finalCH4 = bsxfun(@times, ghCH4, cast(ROIs(k,1).masks, 'like', ghCH4));%cuts out CH4 image with ROI mask
+    close all
+   
+    cd(ROIPath);
+    imwrite(finalCH4,strcat(CH4names(k,1).name,'_ROI.tif'),'tif');   
+    close all
+end
+
+else 
+    %All following sections follows the same pattern as all the channels
+    %above, just without CH4
+
+    CH1_path = CH1;
+    CH1names = dir(fullfile(CH1_path, '*.tif'));
+    totalCH1 = numel(CH1names);
+
+
+    for k = 1:totalCH1
+    fd1 = fieldnames(CH1names(k));
+    f = fullfile(CH1_path, CH1names(k).name);
+    loadCH1 = imread(f);
+    ghCH1 = im2gray(loadCH1);
+
+    finalCH1 = bsxfun(@times, ghCH1, cast(ROIs(k,1).masks, 'like', ghCH1));
+    close all
+   
+    cd(ROIPath);
+    imwrite(finalCH1,strcat(CH1names(k,1).name,'_ROI.tif'),'tif');  
+    close all
+    end
+
+    cd(ROIPath)
+    save('ROIs.mat','ROIs') % save ROIs variable in the ROIs.mat file
+    close()
+
+%load and process CH2
+    CH2_path = CH2;
+    CH2names = dir(fullfile(CH2_path, '*.tif'));
+    totalCH2 = numel(CH2names);
+
+
+    for k = 1:totalCH2
+    fd2 = fieldnames(CH2names(k));
+    f = fullfile(CH2_path, CH2names(k).name);
+    loadCH2 = imread(f);
+    ghCH2 = im2gray(loadCH2);
+
+    finalCH2 = bsxfun(@times, ghCH2, cast(ROIs(k,1).masks, 'like', ghCH2));
+    close all
+
+    cd(ROIPath);
+    imwrite(finalCH2,strcat(CH2names(k,1).name,'_ROI.tif'),'tif');   
+    close all
+    end
+
+%load and process CH3/DAPI
+
+    DAPI_CH3_path = DAPI_CH3;
+    DAPI_CH3names = dir(fullfile(DAPI_CH3_path, '*.tif'));
+    totalDAPI_CH3 = numel(DAPI_CH3names);
+
+
+    for k = 1:totalDAPI_CH3
+    fd3 = fieldnames(DAPI_CH3names(k));
+    f = fullfile(DAPI_CH3_path, DAPI_CH3names(k).name);
+    loadDAPI_CH3 = imread(f);
+    ghDAPI_CH3 = im2gray(loadDAPI_CH3);
+
+    finalDAPI_CH3 = bsxfun(@times, ghDAPI_CH3, cast(ROIs(k,1).masks, 'like', ghDAPI_CH3));
+    close all
+  
+    cd(ROIPath);
+    imwrite(finalDAPI_CH3,strcat(DAPI_CH3names(k,1).name,'_ROI.tif'),'tif');  
+    close all
+    end
+end
+
+disp("The end");
+
+
+
+
+
+    
+
+
+
+     
